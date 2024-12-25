@@ -14,8 +14,6 @@ RUN apk add --no-cache \
     harfbuzz \
     ca-certificates \
     ttf-freefont
-RUN apt update
-RUN apt install chromium-browser
 RUN addgroup -S appgroup && adduser -S appuser -G appgroup
 WORKDIR /usr/src/app
 COPY --from=builder --chown=appuser:appgroup /usr/src/app/node_modules ./node_modules
