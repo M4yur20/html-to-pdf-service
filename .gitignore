@@ -47,3 +47,7 @@ Thumbs.db
 
 # Google Cloud credentials
 *.json
+
+# Don't ignore package.json and package-lock.json
+!package.json
+!package-lock.json
