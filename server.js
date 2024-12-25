@@ -9,6 +9,7 @@ const logger = require('./src/utils/logger');
 const errorHandler = require('./src/middleware/errorHandler');
 const pdfRoutes = require('./src/routes/pdfRoutes');
 const healthRoutes = require('./src/routes/healthRoutes');
+const cacheService = require('./src/services/cacheService');
 
 const app = express();
 
