@@ -4,7 +4,6 @@ COPY package*.json ./
 RUN npm ci --only=production
 COPY . .
 
-
 FROM node:23-alpine3.20
 RUN apk add --no-cache \
     chromium \
@@ -14,13 +13,11 @@ RUN apk add --no-cache \
     harfbuzz \
     ca-certificates \
     ttf-freefont
-RUN addgroup -S appgroup && adduser -S appuser -G appgroup
 WORKDIR /usr/src/app
-COPY --from=builder --chown=appuser:appgroup /usr/src/app/node_modules ./node_modules
-COPY --chown=appuser:appgroup . .
+COPY --from=builder /usr/src/app/node_modules ./node_modules
+COPY . .
 ENV NODE_ENV=production
 ENV CHROME_BIN=/usr/bin/chromium-browser
 ENV CHROME_PATH=/usr/lib/chromium/
-USER appuser
 EXPOSE 3000
 CMD ["node", "server.js"]
