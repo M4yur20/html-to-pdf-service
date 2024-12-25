@@ -4,8 +4,8 @@ COPY package*.json ./
 RUN npm ci --only=production
 COPY . .
 FROM node:23-alpine3.20
-RUN sudo apt update
-RUN sudo apt install chromium-browser
+RUN apt update
+RUN apt install chromium-browser
 RUN addgroup -S appgroup && adduser -S appuser -G appgroup
 WORKDIR /usr/src/app
 COPY --from=builder --chown=appuser:appgroup /usr/src/app/node_modules ./node_modules
