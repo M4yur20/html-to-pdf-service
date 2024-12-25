@@ -5,8 +5,8 @@ class PdfService {
   async generatePdf(input, options = {}) {
     let browser;
     try {
-      const browser = await puppeteer.launch({
-        executablePath: process.env.PUPPETEER_EXECUTABLE_PATH,
+      browser = await puppeteer.launch({
+        headless: 'new',
         args: ['--no-sandbox', '--disable-setuid-sandbox']
       });
 
