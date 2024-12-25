@@ -32,8 +32,8 @@ RUN apt-get update && apt-get install -y wget gnupg curl \
 RUN which google-chrome-stable || true
 
 # Skip Chromium download and set the executable path for Puppeteer
-ENV PUPPETEER_SKIP_CHROMIUM_DOWNLOAD true 
-ENV PUPPETEER_EXECUTABLE_PATH /usr/bin/google-chrome-stable
+ENV PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=true 
+ENV PUPPETEER_EXECUTABLE_PATH=/usr/bin/google-chrome-stable
 
 # Copy the application source code
 COPY . .
