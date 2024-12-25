@@ -1,7 +1,7 @@
 FROM node:23-alpine3.20 AS builder
 WORKDIR /usr/src/app
 COPY package*.json ./
-RUN npm i
+RUN npm ci --only=production
 COPY . .
 
 
