@@ -3,7 +3,17 @@ WORKDIR /usr/src/app
 COPY package*.json ./
 RUN npm ci --only=production
 COPY . .
+
+
 FROM node:23-alpine3.20
+RUN apk add --no-cache \
+    chromium \
+    nss \
+    freetype \
+    freetype-dev \
+    harfbuzz \
+    ca-certificates \
+    ttf-freefont
 RUN apt update
 RUN apt install chromium-browser
 RUN addgroup -S appgroup && adduser -S appuser -G appgroup
