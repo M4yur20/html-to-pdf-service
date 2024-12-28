@@ -1,12 +1,10 @@
-// src/routes/healthRoutes.js
-
 const express = require('express');
 const router = express.Router();
 const cacheService = require('../services/cacheService');
+const auth = require('../middleware/auth');
 
-router.get('/', async (req, res) => {
+router.get('/', auth, async (req, res) => {
   const cacheHealth = await cacheService.getHealth();
-
   res.json({
     status: 'ok',
     timestamp: new Date(),
@@ -18,7 +16,7 @@ router.get('/', async (req, res) => {
   });
 });
 
-router.get('/detailed', async (req, res) => {
+router.get('/detailed', auth, async (req, res) => {
   try {
     const cacheHealth = await cacheService.getHealth();
 
