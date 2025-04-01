@@ -5,6 +5,13 @@ exports.convertToPdf = async (req, res, next) => {
   try {
     const { input, scale, format, orientation, scaleX, scaleY } = req.body;
 
+    if (!input) {
+      return res.status(400).json({
+        success: false,
+        error: 'Input is required'
+      });
+    }
+
     const pdfBuffer = await pdfService.generatePdf(input, {
       scale,
       format,
@@ -13,7 +20,7 @@ exports.convertToPdf = async (req, res, next) => {
       scaleY 
     });
 
-    const base64Pdf = pdfBuffer.toString('base64');
+    const base64Pdf = Buffer.from(pdfBuffer).toString('base64');
 
     res.json({
       success: true,
@@ -27,6 +34,9 @@ exports.convertToPdf = async (req, res, next) => {
     });
   } catch (error) {
     logger.error('Error in PDF conversion:', error);
-    next(error);
+    return res.status(500).json({
+      success: false,
+      error: 'PDF conversion failed'
+    });
   }
 };

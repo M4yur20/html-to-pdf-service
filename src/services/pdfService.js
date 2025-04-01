@@ -19,7 +19,6 @@ class PdfService {
         await page.setContent(input, { waitUntil: 'networkidle0' });
       }
 
-      // Just add this one line to ensure shadows are printed
       await page.emulateMediaType('screen');
 
       const pdfBuffer = await page.pdf({
