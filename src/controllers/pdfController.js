@@ -1,5 +1,4 @@
 const pdfService = require('../services/pdfService');
-const storageService = require('../services/storageService');
 const logger = require('../utils/logger');
 
 exports.convertToPdf = async (req, res, next) => {
@@ -14,18 +13,16 @@ exports.convertToPdf = async (req, res, next) => {
       scaleY 
     });
 
-    const fileInfo = await storageService.uploadFile(pdfBuffer);
+    const base64Pdf = pdfBuffer.toString('base64');
 
     res.json({
       success: true,
-      url: fileInfo.url,
+      data: base64Pdf,
       metadata: {
         format,
         orientation,
         scale,
-        filename: fileInfo.filename,
-        size: fileInfo.size,
-        expiresAt: fileInfo.expiresAt
+        size: pdfBuffer.length
       }
     });
   } catch (error) {
