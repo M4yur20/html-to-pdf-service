@@ -21,14 +21,24 @@ class PdfService {
 
       await page.emulateMediaType('screen');
 
-      const pdfBuffer = await page.pdf({
+      const pdfOptions = {
         format: options.format || 'A4',
         printBackground: true,
-        scale: options.scale || 1,
         landscape: options.orientation === 'landscape',
-        margin: { top: '0.5cm', right: '0.5cm', bottom: '0.5cm', left: '0.5cm' },
-        ...options
-      });
+        margin: options.margin || {
+          top: '10mm',
+          right: '10mm',
+          bottom: '10mm',
+          left: '10mm'
+        }
+      };
+
+      // Only add scale if it's a valid number
+      if (typeof options.scale === 'number' && !isNaN(options.scale)) {
+        pdfOptions.scale = options.scale;
+      }
+
+      const pdfBuffer = await page.pdf(pdfOptions);
 
       return pdfBuffer;
     } catch (error) {
