@@ -10,10 +10,10 @@ const storage = multer.diskStorage({
 });
 
 const fileFilter = (req, file, cb) => {
-  if (file.mimetype === 'text/html') {
+  if (file.mimetype === 'text/html' || file.mimetype === 'application/zip') {
     cb(null, true);
   } else {
-    cb(new Error('Invalid file type. Only HTML files are allowed.'), false);
+    cb(new Error('Invalid file type. Only HTML and ZIP files are allowed.'), false);
   }
 };
 
