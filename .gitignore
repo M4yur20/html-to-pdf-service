@@ -51,3 +51,7 @@ Thumbs.db
 # Don't ignore package.json and package-lock.json
 !package.json
 !package-lock.json
+
+*.zip
+*.svg
+*.mmd

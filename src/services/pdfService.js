@@ -6,7 +6,9 @@ class PdfService {
     let browser;
     try {
       browser = await puppeteer.launch({
-        executablePath: '/usr/bin/google-chrome',
+        // executablePath: '/usr/bin/google-chrome',
+        waitUntil: 'networkidle0', // Wait for all network requests, including CDN scripts
+        timeout: 30000,
         headless: 'new',
         args: ['--no-sandbox', '--disable-setuid-sandbox']
       });

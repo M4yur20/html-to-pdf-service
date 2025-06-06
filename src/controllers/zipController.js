@@ -4,102 +4,107 @@ const AdmZip = require('adm-zip');
 const marked = require('marked');
 const pdfService = require('../services/pdfService');
 const logger = require('../utils/logger');
+const { exec } = require('child_process');
+const util = require('util');
+const execPromise = util.promisify(exec);
 
 // Custom renderer for marked
 const renderer = new marked.Renderer();
 
-// Handle code blocks (for Mermaid diagrams)
-renderer.code = function (code, lang, escaped) {
-  let actualCode = code;
-  let actualLang = lang;
-  
-  if (typeof code === 'object' && code !== null) {
-    actualCode = code.text || code.code || String(code);
-    actualLang = code.lang || lang;
-  }
-  
-  actualCode = String(actualCode || '');
-  actualLang = String(actualLang || '').toLowerCase();
-  
-  if (actualLang === 'mermaid') {
-    return `<div class="mermaid">${actualCode}</div>`;
-  }
-  
-  if (!escaped) {
-    actualCode = actualCode
-      .replace(/&/g, '&amp;')
-      .replace(/</g, '&lt;')
-      .replace(/>/g, '&gt;')
-      .replace(/"/g, '&quot;')
-      .replace(/'/g, '&#39;');
-  }
-  
-  return `<pre><code class="${actualLang ? 'language-' + actualLang : ''}">${actualCode}</code></pre>`;
+// Handle code blocks (for non-Mermaid code)
+renderer.code = function (code, lang) {
+  const actualCode = typeof code === 'object' && code !== null ? (code.text || code.code || String(code)) : String(code || '');
+  const actualLang = typeof lang === 'string' ? lang.toLowerCase() : '';
+
+  const escapedCode = actualCode
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+
+  return `<pre><code class="${actualLang ? 'language-' + actualLang : ''}">${escapedCode}</code></pre>`;
 };
 
 // Transform .md links to HTML anchors
 renderer.link = function (href, title, text) {
-  let actualHref, actualTitle, actualText;
-  
-  if (typeof href === 'object' && href !== null) {
-    actualHref = href.href || href.url || '#';
-    actualTitle = href.title || title || '';
-    actualText = href.text || text || 'Link';
-  } else {
-    actualHref = href || '#';
-    actualTitle = title || '';
-    actualText = text || 'Link';
-  }
-  
-  actualHref = String(actualHref);
-  actualTitle = String(actualTitle);
-  actualText = String(actualText);
-  
+  const actualHref = typeof href === 'object' && href !== null ? (href.href || href.url || '#') : (href || '#');
+  const actualTitle = typeof title === 'string' ? title : '';
+  const actualText = typeof text === 'string' ? text : 'Link';
+
+  let finalHref = actualHref;
   if (actualHref.endsWith('.md')) {
     const chapterNum = actualHref.match(/(\d+)/)?.[0];
-    if (chapterNum) {
-      actualHref = '#chapter-' + chapterNum;
-    } else {
-      actualHref = '#introduction';
-    }
+    finalHref = chapterNum ? `#chapter-${chapterNum}` : '#introduction';
   }
-  
-  actualHref = actualHref.replace(/"/g, '&quot;');
-  actualTitle = actualTitle.replace(/"/g, '&quot;');
-  
-  return `<a href="${actualHref}"${actualTitle ? ' title="' + actualTitle + '"' : ''}>${actualText}</a>`;
+
+  return `<a href="${finalHref.replace(/"/g, '&quot;')}"${actualTitle ? ` title="${actualTitle.replace(/"/g, '&quot;')}"` : ''}>${actualText}</a>`;
 };
 
 // Handle headings with proper anchors
-renderer.heading = function (text, level, raw, slugger) {
-  let actualText, actualLevel;
-  
-  if (typeof text === 'object' && text !== null) {
-    actualText = text.text || String(text);
-    actualLevel = text.depth || level || 1;
-  } else {
-    actualText = String(text || '');
-    actualLevel = level || 1;
-  }
-  
+renderer.heading = function (text, level) {
+  const actualText = typeof text === 'object' && text !== null ? (text.text || String(text)) : String(text || '');
+  const actualLevel = Number(level) || 1;
+
   const slug = actualText
     .toLowerCase()
     .replace(/[^\w\s-]/g, '')
     .replace(/\s+/g, '-')
     .trim();
-  
+
   return `<h${actualLevel} id="${slug}">${actualText}</h${actualLevel}>`;
 };
 
 // Configure marked
 marked.setOptions({
-  renderer: renderer,
+  renderer,
   gfm: true,
   breaks: true,
   sanitize: false,
   smartLists: true,
   smartypants: true
 });
+
+// Function to preprocess Markdown and render Mermaid diagrams
+async function preprocessMermaid(content) {
+  // Regular expression to match Mermaid code blocks
+  const mermaidRegex = /```mermaid\n([\s\S]*?)\n```/g;
+  let processedContent = content;
+  const matches = [...content.matchAll(mermaidRegex)];
+
+  for (const match of matches) {
+    const mermaidCode = match[1];
+    try {
+      // Write the Mermaid code to a temporary file
+      const tempInput = path.join(__dirname, `temp_mermaid_${Date.now()}_${Math.random().toString(36).substring(2)}.mmd`);
+      const tempOutput = path.join(__dirname, `temp_mermaid_${Date.now()}_${Math.random().toString(36).substring(2)}.svg`);
+      await fs.writeFile(tempInput, mermaidCode);
+
+      // Use local mermaid-cli installation or global one
+      const mmdcPath = path.join(process.cwd(), 'node_modules', '.bin', 'mmdc');
+      const mmdcCommand = await fs.access(mmdcPath).then(() => mmdcPath).catch(() => 'mmdc');
+      
+      // Use mermaid-cli to render the diagram to SVG
+      await execPromise(`"${mmdcCommand}" -i "${tempInput}" -o "${tempOutput}" --theme default`);
+
+      // Read the generated SVG
+      const svg = await fs.readFile(tempOutput, 'utf8');
+
+      // Clean up temporary files
+      await fs.unlink(tempInput);
+      await fs.unlink(tempOutput);
+
+      // Replace the Mermaid code block with the SVG
+      processedContent = processedContent.replace(match[0], `<div class="mermaid">${svg}</div>`);
+    } catch (error) {
+      logger.error(`Error rendering Mermaid diagram:`, error);
+      // Replace with an error message if rendering fails
+      processedContent = processedContent.replace(match[0], `<div class="mermaid-error">Error rendering diagram: ${error.message}</div>`);
+    }
+  }
+
+  return processedContent;
+}
 
 // HTML template
 const htmlTemplate = (content, toc, title) => `
@@ -109,7 +114,6 @@ const htmlTemplate = (content, toc, title) => `
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>${title}</title>
-  <script src="https://cdn.jsdelivr.net/npm/mermaid@10.6.1/dist/mermaid.min.js"></script>
   <style>
     * {
       margin: 0;
@@ -386,6 +390,11 @@ const htmlTemplate = (content, toc, title) => `
       box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
     }
 
+    .mermaid svg {
+      max-width: 100%;
+      height: auto;
+    }
+
     strong {
       font-weight: 600;
       color: #111827;
@@ -459,34 +468,13 @@ const htmlTemplate = (content, toc, title) => `
 <body>
   ${toc}
   ${content}
-
   <script>
-    // Initialize Mermaid
-    mermaid.initialize({
-      startOnLoad: true,
-      theme: 'default',
-      flowchart: {
-        useMaxWidth: true,
-        htmlLabels: true
-      },
-      sequence: {
-        useMaxWidth: true
-      },
-      gantt: {
-        useMaxWidth: true
-      }
-    });
-
-    // Smooth scrolling for TOC links
     document.querySelectorAll('.toc a').forEach(anchor => {
       anchor.addEventListener('click', function (e) {
         e.preventDefault();
         const target = document.querySelector(this.getAttribute('href'));
         if (target) {
-          target.scrollIntoView({
-            behavior: 'smooth',
-            block: 'start'
-          });
+          target.scrollIntoView({ behavior: 'smooth', block: 'start' });
         }
       });
     });
@@ -495,33 +483,57 @@ const htmlTemplate = (content, toc, title) => `
 </html>
 `;
 
+// Recursive function to find all .md files
+async function findMarkdownFiles(dir) {
+  let mdFiles = [];
+  try {
+    const files = await fs.readdir(dir, { withFileTypes: true });
+    for (const file of files) {
+      const fullPath = path.join(dir, file.name);
+      if (file.isDirectory()) {
+        mdFiles = mdFiles.concat(await findMarkdownFiles(fullPath));
+      } else if (file.name.endsWith('.md')) {
+        mdFiles.push(fullPath);
+      }
+    }
+  } catch (error) {
+    logger.error(`Error reading directory ${dir}:`, error);
+  }
+  return mdFiles;
+}
+
 // Extract TOC from files
-async function extractTOC(files, folderPath) {
-  const indexPath = path.join(folderPath, 'index.md');
+async function extractTOC(files) {
+  const indexPath = files.find(f => path.basename(f) === 'index.md');
+  let title = 'Documentation';
 
   try {
-    const indexContent = await fs.readFile(indexPath, 'utf8');
-    const titleMatch = indexContent.match(/^\s*#\s+(.+)/m);
-    const title = titleMatch ? titleMatch[1] : 'Documentation';
+    if (indexPath) {
+      const indexContent = await fs.readFile(indexPath, 'utf8');
+      const titleMatch = indexContent.match(/^\s*#\s+(.+)/m);
+      if (titleMatch) title = titleMatch[1];
+    }
 
     const tocItems = [];
-    tocItems.push('<li><a href="#introduction">Introduction</a></li>');
+    if (indexPath) {
+      tocItems.push('<li><a href="#introduction">Introduction</a></li>');
+    }
 
     const sortedFiles = files
-      .filter(f => f !== 'index.md' && f.endsWith('.md'))
-      .sort();
+      .filter(f => path.basename(f) !== 'index.md')
+      .sort((a, b) => path.basename(a).localeCompare(path.basename(b)));
 
     for (const file of sortedFiles) {
-      const chapterNum = file.match(/(\d+)/)?.[0];
-      const chapterName = file
+      const fileName = path.basename(file);
+      const chapterNum = fileName.match(/^\d+/)?.[0];
+      const chapterName = fileName
         .replace(/^\d+_/, '')
-        .replace('.md', '')
+        .replace(/\.md$/, '')
         .replace(/_/g, ' ')
-        .replace(/\b\w/g, l => l.toUpperCase());
+        .replace(/\b\w/g, c => c.toUpperCase());
 
-      if (chapterNum) {
-        tocItems.push(`<li><a href="#chapter-${chapterNum}">Chapter ${chapterNum}: ${chapterName}</a></li>`);
-      }
+      const slug = chapterName.toLowerCase().replace(/\s+/g, '-');
+      tocItems.push(`<li><a href="#${chapterNum ? `chapter-${chapterNum}` : slug}">${chapterNum ? `Chapter ${chapterNum}: ` : ''}${chapterName}</a></li>`);
     }
 
     const tocHtml = `
@@ -535,7 +547,7 @@ async function extractTOC(files, folderPath) {
 
     return { toc: tocHtml, title };
   } catch (error) {
-    logger.error('Could not extract TOC from index.md:', error);
+    logger.error('Could not extract TOC:', error);
     return {
       toc: `
         <div class="toc">
@@ -545,7 +557,7 @@ async function extractTOC(files, folderPath) {
           </ul>
         </div>
       `,
-      title: 'Documentation',
+      title: 'Documentation'
     };
   }
 }
@@ -559,24 +571,26 @@ async function processZipToHtml(zipPath) {
     const zip = new AdmZip(zipPath);
     zip.extractAllTo(tempFolder, true);
 
-    // Find Markdown files
-    const files = await fs.readdir(tempFolder);
-    const mdFiles = files.filter(file => file.endsWith('.md'));
+    // Find all Markdown files recursively
+    const mdFiles = await findMarkdownFiles(tempFolder);
+    logger.info('Found Markdown files:', mdFiles.map(f => path.relative(tempFolder, f)));
 
     if (mdFiles.length === 0) {
       throw new Error('No .md files found in the ZIP file');
     }
 
-    const { toc, title } = await extractTOC(mdFiles, tempFolder);
+    const { toc, title } = await extractTOC(mdFiles);
     let combinedContent = '';
 
     // Process index.md first
-    const indexFile = mdFiles.find(f => f === 'index.md');
+    const indexFile = mdFiles.find(f => path.basename(f) === 'index.md');
     if (indexFile) {
       try {
-        const content = await fs.readFile(path.join(tempFolder, indexFile), 'utf8');
+        const content = await fs.readFile(indexFile, 'utf8');
         const cleanContent = content.replace(/## Chapters[\s\S]*?---\s*/, '');
-        const html = await marked.parse(cleanContent);
+        // Preprocess Mermaid diagrams
+        const processedContent = await preprocessMermaid(cleanContent);
+        const html = await marked.parse(processedContent);
         combinedContent += `<div id="introduction" class="chapter">${html}</div>`;
       } catch (error) {
         logger.error('Error processing index.md:', error);
@@ -585,28 +599,33 @@ async function processZipToHtml(zipPath) {
 
     // Process other chapters
     const chapterFiles = mdFiles
-      .filter(f => f !== 'index.md')
-      .sort();
+      .filter(f => path.basename(f) !== 'index.md')
+      .sort((a, b) => path.basename(a).localeCompare(path.basename(b)));
 
     for (const file of chapterFiles) {
       try {
-        const content = await fs.readFile(path.join(tempFolder, file), 'utf8');
-        const chapterNum = file.match(/(\d+)/)?.[0];
-        const html = await marked.parse(content);
-        if (chapterNum) {
-          combinedContent += `<div id="chapter-${chapterNum}" class="chapter">${html}</div>`;
-        } else {
-          combinedContent += `<div class="chapter">${html}</div>`;
-        }
+        const content = await fs.readFile(file, 'utf8');
+        const fileName = path.basename(file);
+        const chapterNum = fileName.match(/^\d+/)?.[0];
+        const chapterName = fileName
+          .replace(/^\d+_/, '')
+          .replace(/\.md$/, '')
+          .replace(/_/g, ' ')
+          .replace(/\b\w/g, c => c.toUpperCase());
+        const slug = chapterName.toLowerCase().replace(/\s+/g, '-');
+        // Preprocess Mermaid diagrams
+        const processedContent = await preprocessMermaid(content);
+        const html = await marked.parse(processedContent);
+        combinedContent += `<div id="${chapterNum ? `chapter-${chapterNum}` : slug}" class="chapter">${html}</div>`;
       } catch (error) {
         logger.error(`Error processing ${file}:`, error);
       }
     }
 
     // Generate final HTML
-    const finalHtml = htmlTemplate(combinedContent, toc, title);
-    return finalHtml;
+    return htmlTemplate(combinedContent, toc, title);
   } catch (error) {
+    logger.error('Error in processZipToHtml:', error);
     throw error;
   } finally {
     // Clean up temp folder
@@ -632,10 +651,10 @@ exports.convertZipToPdf = async (req, res, next) => {
       format: req.body.format || 'A4',
       orientation: req.body.orientation || 'portrait',
       margin: {
-        top: '10mm',
-        right: '10mm',
-        bottom: '10mm',
-        left: '10mm'
+        top: '0mm',
+        right: '0mm',
+        bottom: '0mm',
+        left: '0mm'
       }
     };
 
@@ -666,7 +685,7 @@ exports.convertZipToPdf = async (req, res, next) => {
     logger.error('Error in ZIP to PDF conversion:', error);
     return res.status(500).json({
       success: false,
-      error: error.message || 'ZIP to System: PDF conversion failed'
+      error: error.message || 'ZIP to PDF conversion failed'
     });
   }
 };
