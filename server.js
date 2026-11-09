@@ -48,17 +48,35 @@ const server = app.listen(config.port, () => {
   logger.info(`Server running on port ${config.port}`);
 });
 
-process.on('SIGTERM', async () => {
-  logger.info('SIGTERM signal received: closing HTTP server');
+// The service-account key is no longer baked into the image (see .dockerignore): it must be
+// mounted read-only at runtime at the path GCS_KEYFILE names. Say so loudly instead of failing
+// later on the first upload.
+if (config.gcs.keyFilename && !require('fs').existsSync(config.gcs.keyFilename)) {
+  const msg = `GCS_KEYFILE "${config.gcs.keyFilename}" not found: mount the service-account key read-only at that path`;
+  logger.error(msg);
+  console.error(msg);
+}
 
-  // Close Redis connection
-  await cacheService.closeConnection();
+let shuttingDown = false;
+async function shutdown(signal) {
+  if (shuttingDown) return;
+  shuttingDown = true;
+  logger.info(`${signal} signal received: closing HTTP server`);
+  // Never outlive Docker's 10 s stop timeout (in-flight PDFs get killed with the process).
+  setTimeout(() => process.exit(1), 9000).unref();
 
-  server.close(() => {
+  // Stop accepting requests first; the callback fires once in-flight requests finish.
+  server.close(async () => {
     logger.info('HTTP server closed');
+    // Close Redis connection
+    await cacheService.closeConnection();
     process.exit(0);
   });
-});
+  server.closeIdleConnections();
+}
+
+process.on('SIGTERM', () => shutdown('SIGTERM'));
+process.on('SIGINT', () => shutdown('SIGINT'));
 
 process.on('unhandledRejection', (err) => {
   logger.error('Unhandled Rejection:', err);

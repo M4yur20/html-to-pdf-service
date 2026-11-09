@@ -8,7 +8,7 @@ class PdfService {
       browser = await puppeteer.launch({
         executablePath: '/usr/bin/google-chrome',
         headless: 'new',
-        args: ['--no-sandbox', '--disable-setuid-sandbox']
+        args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage']
       });
 
       const page = await browser.newPage();

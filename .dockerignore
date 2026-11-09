@@ -1,12 +1,26 @@
 node_modules
-npm-debug.log
-Dockerfile
-.dockerignore
+npm-debug.log*
 .git
 .gitignore
-README.md
-.env
-*.log
-coverage
+.DS_Store
 .vscode
 .idea
+.env
+.env.*
+!.env.example
+coverage
+logs
+*.log
+*.md
+*.map
+Dockerfile*
+.dockerignore
+# Google service-account / credential keys must never be baked into an image:
+# mount them read-only at runtime (see README "Runtime secrets" / owner actions).
+prj-*.json
+*service-account*.json
+*credentials*.json
+*keyfile*.json
+*.pem
+*.key
+*.p12
